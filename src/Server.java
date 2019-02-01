@@ -9,8 +9,6 @@ public class Server implements Runnable{
     private PrintWriter out;
     private boolean isLoggedIn;
     private String username;
-    private int id;
-    private boolean isAdmin;
     private static List<Server> loggedInUsers;
 
 
@@ -72,10 +70,13 @@ public class Server implements Runnable{
                     isLoggedIn = true;
                     username = message[1];
                     loggedInUsers.add(this);
-                    id = loggedInUsers.size()-1;
-                    System.out.println(username+" "+id);
-                    out.println("accept");
-                    if(message[3].equals("admin")) isAdmin = true;
+
+                    if(message[3].equals("admin")) {
+                        out.println("accept#" + message[1] + "#admin");
+
+                    }
+                    else
+                        out.println("accept#" + message[1]+ "#normal");
                 }
                 else out.println("decline");
                 break;
@@ -85,16 +86,26 @@ public class Server implements Runnable{
                     if(message[1].equals("show")){
                         System.out.println(message[2]);
 
-                        out.println("users active right now:");
+                        StringBuffer returnMessage = new StringBuffer("show#");
+
                         for(int i=0; i<loggedInUsers.size(); i++){
-                            out.println(loggedInUsers.get(i).username);
+                            returnMessage.append(loggedInUsers.get(i).username+"#");
                         }
+
+                        System.out.println(returnMessage.toString());
+                        out.println(returnMessage.toString());
                     }
+
                     if(message[1].equals("logout")){
                         System.out.println(message[2]);
 
                         isLoggedIn = false;
-                        loggedInUsers.remove(id);
+                       for(int i=0; i<loggedInUsers.size();i++){
+                            if(username.equals(loggedInUsers.get(i).username)){
+                                loggedInUsers.remove(i);
+                           }
+                        }
+
                         out.println("disconnect");
                         try {
                             socket.close();
@@ -106,14 +117,10 @@ public class Server implements Runnable{
                 break;
 
             case "B":
-                if(isLoggedIn){
-                    if(isAdmin){
-                        for(Server receiver:loggedInUsers){
-                            if(receiver!=this)
-                                receiver.out.println(message[1]+" (from: "+username+", admin)");
-                        }
-                    }
-                    else out.println("sorry! only admins can send broadcast message.");
+
+                for(Server receiver:loggedInUsers){
+                    if(receiver!=this)
+                        receiver.out.println("broad#"+ message[1]+ " (from: "+username+", admin)");
                 }
                 break;
 
@@ -121,13 +128,42 @@ public class Server implements Runnable{
                 if(isLoggedIn){
                     for(Server receiver:loggedInUsers){
                         if(receiver.username.equals(message[1])) {
-                            receiver.out.println(message[2]+" (from: "+username+")");
+                            receiver.out.println("text#" + message[2] + " (from: " + username + ")");
 
-                            if(message[3]!=null)
-                                System.out.println("file will be sent");
+                            if(message.length>3){
+                                receiver.out.println("file#"+message[3]+"#"+message[4]);
+                                receiver.receive_and_send(this,message[4]);
+                            }
                         }
                     }
                 }
+        }
+    }
+
+    private void receive_and_send(Server sender,String size) {
+        try
+        {
+            int filesize = Integer.parseInt(size);
+            byte[] contents = new byte[10000];
+
+            InputStream is = sender.socket.getInputStream();
+            OutputStream os = socket.getOutputStream();
+
+            int bytesRead;
+            int total = 0;
+
+            while(total!=filesize)
+            {
+                bytesRead=is.read(contents);
+                os.write(contents);
+                total += bytesRead;
+
+            }
+            os.flush();
+        }
+        catch(Exception e)
+        {
+            System.err.println("Could not transfer file.");
         }
     }
 
